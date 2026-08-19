@@ -20,3 +20,44 @@ html {
 body {
   margin-bottom: 60px;
 }
+/* prevent horizontal scrolling when sidebar present */
+body { overflow-x: hidden; }
+
+/* Admin-esque sidebar and topbar styles */
+.main-sidebar {
+  width: 260px;
+  background: linear-gradient(180deg,#0f1724 0%, #13303f 100%);
+  color: #fff;
+  min-height: 100vh;
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  overflow-y: auto;
+  padding-bottom: 2rem;
+}
+.sidebar-header { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.brand-link { color: #fff; text-decoration: none }
+.brand-icon {
+  width:40px;height:40px;border-radius:8px;background:#1e90ff;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:18px
+}
+.brand-text{font-weight:600;color:#fff}
+.sidebar-section{font-size:12px;color:rgba(255,255,255,0.65);padding:.75rem .75rem 0;margin:0}
+.sidebar .nav-link{color:rgba(255,255,255,0.9);display:flex;align-items:center;padding:.5rem .75rem}
+.sidebar .nav-link .bi{font-size:18px}
+.sidebar .nav-link:hover{background:rgba(255,255,255,0.03);color:#fff}
+.sidebar .badge{margin-left:auto}
+
+.content-wrapper{margin-left:260px;padding:1.5rem;background:#f4f6f9;min-height:100vh}
+.content-inner{max-width:1200px;margin:0 auto}
+.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 1rem;background:#fff;border-bottom:1px solid #e6e9ef;box-shadow:0 1px 0 rgba(27,31,35,0.03)}
+.profile-img{width:38px;height:38px;border-radius:50%;object-fit:cover}
+
+/* dark mode overrides */
+body.dark-mode .main-sidebar{background:#0b1220}
+body.dark-mode .content-wrapper{background:#0b1220;color:#e5e7eb}
+body.dark-mode .topbar{background:#071021;border-bottom-color:#0b1220}
+
+@media (max-width: 767px) {
+  .main-sidebar{left:-260px;position:fixed;z-index:1050}
+  .main-sidebar.open{left:0}
+  .content-wrapper{margin-left:0}
+}

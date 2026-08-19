@@ -2,29 +2,63 @@
     ViewBag.Title = "Stored Procedures";
 }
 
-<h2>Select a Stored Procedure</h2>
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex gap-3 align-items-start flex-column flex-md-row">
+                        <div class="flex-grow-1">
+                            <label class="form-label mb-1">Select Stored Procedure</label>
+                            @Html.DropDownList("storedProcedureName", (SelectList)ViewBag.StoredProcedures, "Select a Stored Procedure", new { id = "spDropdown", @class = "form-select" })
+                        </div>
 
-<p style="color: darkblue; text-align: center;">Total Stored Procedures: @ViewBag.StoredProcedureCount</p> 
+                        <div class="d-flex flex-column gap-2">
+                            <button id="toggleParams" class="btn btn-outline-secondary btn-sm">Show/Hide Parameters</button>
+                            <button id="saveParams" class="btn btn-outline-success btn-sm" disabled>Save Params</button>
+                        </div>
 
+                        <div class="d-flex flex-column gap-2 ms-auto text-end">
+                            <div class="text-muted">Total: <strong>@ViewBag.StoredProcedureCount</strong></div>
+                        </div>
+                    </div>
 
-@using (Html.BeginForm("FetchParameters", "StoredProcedure", FormMethod.Post, new { id = "spForm" }))
-{
-    <div>
-        @Html.Label("Select Stored Procedure: ")
-        @Html.DropDownList("storedProcedureName", (SelectList)ViewBag.StoredProcedures, "Select a Stored Procedure", new { id = "spDropdown" })
+                    <hr />
+
+                    <div id="parameterContainer">
+                        <div id="parameterList">@Html.Partial("_StoredProcedureParameters", new List<StoredProcedureActions.Models.StoredProcedureParameter>())</div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button id="executeBtn" class="btn btn-primary" disabled>Execute Stored Procedure</button>
+                        <button id="clearResults" class="btn btn-outline-secondary">Clear Results</button>
+                        <button id="exportCsv" class="btn btn-outline-primary" disabled>Export CSV</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
     </div>
 
-    <br />
-
-    <div id="parameterList">
-        @Html.Partial("_StoredProcedureParameters", new List<StoredProcedureActions.Models.StoredProcedureParameter>())
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div id="executionResult"></div>
+                </div>
+            </div>
+        </div>
     </div>
-}
+</div>
 
 @section scripts {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script type="text/javascript">
         $(document).ready(function () {
+            function enableButtonsForParams() {
+                $('#saveParams').prop('disabled', false);
+            }
+
             $("#spDropdown").change(function () {
                 var selectedSP = $(this).val();
                 if (selectedSP) {
@@ -34,11 +68,130 @@
                         data: { storedProcedureName: selectedSP },
                         success: function (data) {
                             $('#parameterList').html(data);
+                            $('#executeBtn').prop('disabled', false);
+                            enableButtonsForParams();
+                            loadSavedParams(selectedSP);
                         }
                     });
                 } else {
                     $('#parameterList').html('');
+                    $('#executeBtn').prop('disabled', true);
+                    $('#saveParams').prop('disabled', true);
                 }
+            });
+
+            $('#toggleParams').click(function(){
+                $('#parameterContainer').toggle();
+            });
+
+            // Save params to localStorage
+            $('#saveParams').click(function(){
+                var sp = $('#spDropdown').val();
+                if (!sp) return alert('Select a stored procedure first.');
+                var params = {};
+                $('#parameterList').find('input, select, textarea').each(function(){
+                    var name = $(this).attr('name'); if(!name) return;
+                    var val = $(this).attr('type') === 'checkbox' ? ($(this).is(':checked') ? 'true' : 'false') : $(this).val();
+                    params[name] = val;
+                });
+                localStorage.setItem('sp-params-' + sp, JSON.stringify(params));
+                alert('Parameters saved for ' + sp);
+            });
+
+            function loadSavedParams(sp) {
+                try {
+                    var raw = localStorage.getItem('sp-params-' + sp);
+                    if (!raw) return;
+                    var params = JSON.parse(raw);
+                    $('#parameterList').find('input, select, textarea').each(function(){
+                        var name = $(this).attr('name'); if(!name) return;
+                        var val = params[name];
+                        if (val === undefined) return;
+                        if ($(this).attr('type') === 'checkbox') {
+                            $(this).prop('checked', val === 'true');
+                        } else {
+                            $(this).val(val);
+                        }
+                    });
+                } catch(e){ console && console.error(e); }
+            }
+
+            // Execute the stored procedure using AJAX and post parameter values
+            $('#executeBtn').click(function (e) {
+                e.preventDefault();
+                var selectedSP = $('#spDropdown').val();
+                if (!selectedSP) return alert('Select a stored procedure first.');
+
+                var data = { storedProcedureName: selectedSP };
+                $('#parameterList').find('input, select, textarea').each(function () {
+                    var name = $(this).attr('name'); if (!name) return;
+                    var val = $(this).attr('type') === 'checkbox' ? ($(this).is(':checked') ? ($(this).val() || 'true') : 'false') : $(this).val();
+                    data[name] = val;
+                });
+
+                $.ajax({
+                    url: '@Url.Action("Execute", "StoredProcedure")',
+                    type: 'POST',
+                    data: data,
+                    beforeSend: function() {
+                        $('#executeBtn').prop('disabled', true);
+                        $('#execSpinner').show();
+                        $('#executionResult').html('');
+                        $('#exportCsv').prop('disabled', true);
+                    },
+                    success: function (resultHtml) {
+                        $('#executionResult').html(resultHtml);
+                        // enable export if table present
+                        if ($('#executionResult').find('#executionTable').length) {
+                            $('#exportCsv').prop('disabled', false);
+                        }
+                    },
+                    error: function () {
+                        var errHtml = '<div class="alert alert-danger">Error executing stored procedure.</div>';
+                        $('#executionResult').html(errHtml);
+                    },
+                    complete: function() {
+                        $('#execSpinner').hide();
+                        $('#executeBtn').prop('disabled', false);
+                    }
+                });
+            });
+
+            $('#clearResults').click(function(){
+                $('#executionResult').html('');
+                $('#exportCsv').prop('disabled', true);
+            });
+
+            // Export CSV functionality
+            function tableToCSV($table){
+                var rows = [];
+                $table.find('thead tr').each(function(){
+                    var cols = [];
+                    $(this).find('th').each(function(){ cols.push('"' + $(this).text().replace(/"/g,'""') + '"'); });
+                    rows.push(cols.join(','));
+                });
+                $table.find('tbody tr').each(function(){
+                    var cols = [];
+                    $(this).find('td').each(function(){ cols.push('"' + ($(this).text()||'').replace(/"/g,'""') + '"'); });
+                    rows.push(cols.join(','));
+                });
+                return rows.join('\n');
+            }
+
+            $('#exportCsv').click(function(){
+                var $tbl = $('#executionResult').find('#executionTable');
+                if (!$tbl.length) return alert('No result table to export.');
+                var csv = tableToCSV($tbl);
+                var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                var link = document.createElement('a');
+                var url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                var sp = $('#spDropdown').val() || 'results';
+                link.setAttribute('download', sp + '-results.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             });
         });
     </script>

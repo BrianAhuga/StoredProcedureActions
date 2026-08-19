@@ -1,100 +1,55 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using StoredProcedureActions.Models;
+using StoredProcedureActions.Services;
 using System.Data;
 using System.Data.SqlClient;
+using System.Threading.Tasks;
 
 namespace StoredProcedureActions.Controllers
 {
     public class StoredProcedureController : Controller
     {
-        private string connectionString = "Data Source=(local);Initial Catalog=SwiftFinancialsDB_Live;Persist Security Info=true; User ID=sa;Password=pass123; Pooling=True";
+        private readonly IStoredProcedureService _spService;
 
-
-        public ActionResult Index()
+        public StoredProcedureController(IStoredProcedureService spService)
         {
-            var storedProcedures = GetStoredProcedures();
+            _spService = spService;
+        }
+
+        public async Task<IActionResult> Index()
+        {
+            var storedProcedures = await _spService.ListStoredProceduresAsync();
             ViewBag.StoredProcedures = new SelectList(storedProcedures);
             ViewBag.StoredProcedureCount = storedProcedures.Count;
             return View();
         }
 
-
         [HttpPost]
-        public ActionResult FetchParameters(string storedProcedureName)
+        public async Task<IActionResult> FetchParameters(string storedProcedureName)
         {
-            var parameters = new List<StoredProcedureParameter>();
-
-            using (var connection = new SqlConnection(connectionString))
-            {
-                using (var command = new SqlCommand(storedProcedureName, connection))
-                {
-                    command.CommandType = CommandType.StoredProcedure;
-
-                    connection.Open(); 
-                    SqlCommandBuilder.DeriveParameters(command);
-                    connection.Close(); 
-
-                    foreach (SqlParameter param in command.Parameters)
-                    {
-                        if (param.Direction == ParameterDirection.Input || param.Direction == ParameterDirection.InputOutput)
-                        {
-                            parameters.Add(new StoredProcedureParameter
-                            {
-                                Name = param.ParameterName,
-                                DataType = param.SqlDbType.ToString()
-                            });
-                        }
-                    }
-                }
-            }
-
+            var parameters = await _spService.GetParametersAsync(storedProcedureName);
             return PartialView("_StoredProcedureParameters", parameters);
         }
 
-
-        private List<string> GetStoredProcedures()
+        [HttpPost]
+        public async Task<IActionResult> Execute(string storedProcedureName)
         {
-            var storedProcedures = new List<string>();
+            var form = Request.Form;
+            var paramValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            using (var connection = new SqlConnection(connectionString))
+            foreach (var key in form.Keys)
             {
-                var command = new SqlCommand("SELECT SPECIFIC_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", connection);
-                connection.Open();
-                using (var reader = command.ExecuteReader())
+                var k = key.ToString();
+                if (k.StartsWith("paramValues[") && k.EndsWith("]"))
                 {
-                    while (reader.Read())
-                    {
-                        storedProcedures.Add(reader["SPECIFIC_NAME"].ToString());
-                    }
+                    var paramName = k.Substring("paramValues[".Length, k.Length - "paramValues[]".Length);
+                    paramValues[paramName] = form[k];
                 }
             }
 
-            return storedProcedures;
-        }
-
-        private List<StoredProcedureParameter> GetStoredProcedureParameters(string storedProcedureName)
-        {
-            var parameters = new List<StoredProcedureParameter>();
-
-            using (var connection = new SqlConnection(connectionString))
-            {
-                var command = new SqlCommand(storedProcedureName, connection);
-                command.CommandType = CommandType.StoredProcedure;
-
-                SqlCommandBuilder.DeriveParameters(command);
-
-                foreach (SqlParameter param in command.Parameters)
-                {
-                    parameters.Add(new StoredProcedureParameter
-                    {
-                        Name = param.ParameterName,
-                        DataType = param.SqlDbType.ToString()
-                    });
-                }
-            }
-
-            return parameters;
+            var result = await _spService.ExecuteStoredProcedureAsync(storedProcedureName, paramValues);
+            return PartialView("_ExecutionResult", result);
         }
     }
 }

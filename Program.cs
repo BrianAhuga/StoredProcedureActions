@@ -2,6 +2,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+// Register stored procedure service
+builder.Services.AddScoped<StoredProcedureActions.Services.IStoredProcedureService, StoredProcedureActions.Services.StoredProcedureService>();
 
 var app = builder.Build();
 
@@ -22,6 +24,6 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+    pattern: "{controller=StoredProcedure}/{action=Index}/{id?}");
 
 app.Run();

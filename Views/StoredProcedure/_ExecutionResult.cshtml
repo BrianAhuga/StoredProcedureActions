@@ -1,0 +1,82 @@
+@model StoredProcedureActions.Models.ExecutionResult
+
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+
+@if (Model == null)
+{
+    <p>No results.</p>
+}
+else
+{
+    if (Model.Table != null && Model.Table.Columns.Count > 0)
+    {
+        <h3>Result Set</h3>
+        <div class="table-responsive">
+            <table id="executionTable" class="display table table-striped table-bordered" style="width:100%">
+                <thead>
+                    <tr>
+                        @foreach (System.Data.DataColumn col in Model.Table.Columns)
+                        {
+                            <th>@col.ColumnName</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (System.Data.DataRow row in Model.Table.Rows)
+                    {
+                        <tr>
+                            @foreach (var item in row.ItemArray)
+                            {
+                                <td>@(item ?? "")</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    if (Model.OutputParameters != null && Model.OutputParameters.Any())
+    {
+        <h4>Output Parameters</h4>
+        <table class="table table-bordered">
+            <thead>
+                <tr><th>Name</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var kv in Model.OutputParameters)
+                {
+                    <tr>
+                        <td>@kv.Key</td>
+                        <td>@(kv.Value ?? "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript">
+    (function() {
+        // Initialize DataTable for the execution table. If already initialized, destroy and recreate.
+        try {
+            if ($.fn.dataTable && $('#executionTable').length) {
+                if ($.fn.dataTable.isDataTable('#executionTable')) {
+                    $('#executionTable').DataTable().clear().destroy();
+                }
+                $('#executionTable').DataTable({
+                    pageLength: 10,
+                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'All']],
+                    responsive: true,
+                    ordering: true,
+                    searching: true
+                });
+            }
+        } catch (ex) {
+            console && console.log('DataTable init error', ex);
+        }
+    })();
+</script>

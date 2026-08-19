@@ -1,0 +1,158 @@
+USE [NORTHWND];
+GO
+
+-- 1) List customers in a specific country
+CREATE PROCEDURE dbo.usp_GetCustomersByCountry
+    @Country NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        SELECT
+            CustomerID,
+            CompanyName,
+            ContactName,
+            ContactTitle,
+            Address,
+            City,
+            Region,
+            PostalCode,
+            Country,
+            Phone,
+            Fax
+        FROM dbo.Customers
+        WHERE Country = @Country
+        ORDER BY CompanyName;
+    END TRY
+    BEGIN CATCH
+        THROW;
+    END CATCH
+END;
+GO
+
+-- 2) List orders (summary) for a specific customer, with order totals
+CREATE PROCEDURE dbo.usp_GetOrdersByCustomer
+    @CustomerID NCHAR(5)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        SELECT
+            o.OrderID,
+            o.OrderDate,
+            o.RequiredDate,
+            o.ShippedDate,
+            o.ShipCountry,
+            o.Freight,
+            CAST(SUM(od.UnitPrice * od.Quantity * (1.0 - od.Discount)) AS MONEY) AS OrderTotal
+        FROM dbo.Orders AS o
+        LEFT JOIN dbo.[Order Details] AS od ON o.OrderID = od.OrderID
+        WHERE o.CustomerID = @CustomerID
+        GROUP BY
+            o.OrderID, o.OrderDate, o.RequiredDate, o.ShippedDate, o.ShipCountry, o.Freight
+        ORDER BY o.OrderDate DESC;
+    END TRY
+    BEGIN CATCH
+        THROW;
+    END CATCH
+END;
+GO
+
+-- 3) Detail lines for a specific order
+CREATE PROCEDURE dbo.usp_GetOrderDetails
+    @OrderID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        SELECT
+            od.OrderID,
+            od.ProductID,
+            p.ProductName,
+            od.UnitPrice,
+            od.Quantity,
+            od.Discount,
+            CAST(od.UnitPrice * od.Quantity * (1.0 - od.Discount) AS MONEY) AS LineTotal
+        FROM dbo.[Order Details] AS od
+        JOIN dbo.Products AS p ON od.ProductID = p.ProductID
+        WHERE od.OrderID = @OrderID
+        ORDER BY od.OrderID, od.ProductID;
+    END TRY
+    BEGIN CATCH
+        THROW;
+    END CATCH
+END;
+GO
+
+-- 4) Top N selling products (by quantity / optionally date range)
+CREATE PROCEDURE dbo.usp_GetTopSellingProducts
+    @TopN INT = 10,
+    @StartDate DATE = NULL,
+    @EndDate DATE = NULL  -- inclusive
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        SELECT TOP (@TopN)
+            p.ProductID,
+            p.ProductName,
+            SUM(od.Quantity) AS TotalQuantity,
+            CAST(SUM(od.UnitPrice * od.Quantity * (1.0 - od.Discount)) AS MONEY) AS TotalRevenue
+        FROM dbo.[Order Details] AS od
+        JOIN dbo.Orders AS o ON od.OrderID = o.OrderID
+        JOIN dbo.Products AS p ON od.ProductID = p.ProductID
+        WHERE (@StartDate IS NULL OR o.OrderDate >= @StartDate)
+          AND (@EndDate IS NULL OR o.OrderDate < DATEADD(DAY, 1, @EndDate))
+        GROUP BY p.ProductID, p.ProductName
+        ORDER BY SUM(od.Quantity) DESC;
+    END TRY
+    BEGIN CATCH
+        THROW;
+    END CATCH
+END;
+GO
+
+-- 5) Create a new customer (safe checks). Note: running this will modify data.
+CREATE PROCEDURE dbo.usp_CreateCustomer
+    @CustomerID NCHAR(5),
+    @CompanyName NVARCHAR(40),
+    @ContactName NVARCHAR(30) = NULL,
+    @ContactTitle NVARCHAR(30) = NULL,
+    @Address NVARCHAR(60) = NULL,
+    @City NVARCHAR(15) = NULL,
+    @Region NVARCHAR(15) = NULL,
+    @PostalCode NVARCHAR(10) = NULL,
+    @Country NVARCHAR(15) = NULL,
+    @Phone NVARCHAR(24) = NULL,
+    @Fax NVARCHAR(24) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        IF EXISTS (SELECT 1 FROM dbo.Customers WHERE CustomerID = @CustomerID)
+        BEGIN
+            RAISERROR('CustomerID %s already exists.', 16, 1, @CustomerID);
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        INSERT INTO dbo.Customers
+            (CustomerID, CompanyName, ContactName, ContactTitle, Address, City, Region, PostalCode, Country, Phone, Fax)
+        VALUES
+            (@CustomerID, @CompanyName, @ContactName, @ContactTitle, @Address, @City, @Region, @PostalCode, @Country, @Phone, @Fax);
+
+        COMMIT TRANSACTION;
+
+        -- Return the inserted row
+        SELECT *
+        FROM dbo.Customers
+        WHERE CustomerID = @CustomerID;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END;
+GO

@@ -103,7 +103,7 @@ Once restored, the database can be used to test the stored procedures and the AS
 
 ## Sample Stored Procedures
 
-The repository includes a sample SQL script containing the stored procedures required for the project.
+The repository includes a sample SQL script in `StoredProcedureScript.txt` containing the stored procedures required for the project.
 
 The script should be executed against the `NORTHWND` database.
 
